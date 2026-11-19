@@ -1,0 +1,517 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - CloudOps Console{% endblock %}
+
+{% block content %}
+<!-- Top Header & Actions -->
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h4 class="fw-bold mb-1 d-flex align-items-center gap-2">
+            <i class="bi bi-hdd-network-fill text-primary"></i>
+            Quản Lý Hạ Tầng Cloud (Instances & Compute)
+        </h4>
+        <p class="text-muted small mb-0">Giám sát và điều phối máy chủ ảo đa đám mây (Multi-Cloud Deployment)</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'export_csv' %}" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 shadow-sm">
+            <i class="bi bi-download"></i> Xuất CSV
+        </a>
+        <a href="#serverFormCard" class="btn btn-primary-console btn-sm d-flex align-items-center gap-1 shadow-sm px-3 rounded-2">
+            <i class="bi bi-plus-lg"></i> Khởi Tạo Máy Chủ Mới
+        </a>
+    </div>
+</div>
+
+<!-- 4 Thẻ chỉ số tổng quan (Metric Cards) -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card card-panel p-3 h-100">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="stat-card-title">TỔNG MÁY CHỦ</span>
+                <span class="p-2 bg-primary bg-opacity-10 text-primary rounded-3"><i class="bi bi-server"></i></span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h3 class="fw-bold mb-0 text-dark">{{ stats.total }}</h3>
+                <span class="small text-muted">nodes</span>
+            </div>
+            <div class="mt-2 small d-flex gap-2 text-muted">
+                <span class="text-success"><i class="bi bi-check-circle-fill"></i> {{ stats.running }} Up</span>
+                <span>&bull;</span>
+                <span class="text-danger"><i class="bi bi-stop-circle-fill"></i> {{ stats.stopped }} Off</span>
+                <span>&bull;</span>
+                <span class="text-warning"><i class="bi bi-tools"></i> {{ stats.maintenance }} Mnt</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card card-panel p-3 h-100">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="stat-card-title">NĂNG LỰC CPU TỔNG</span>
+                <span class="p-2 bg-success bg-opacity-10 text-success rounded-3"><i class="bi bi-cpu"></i></span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h3 class="fw-bold mb-0 text-success">{{ stats.total_vcpu }}</h3>
+                <span class="small text-muted">vCPU Cores</span>
+            </div>
+            <div class="mt-2 small text-muted">
+                Tổng công suất tính toán đang phân bổ
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card card-panel p-3 h-100">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="stat-card-title">BỘ NHỚ & LƯU TRỮ</span>
+                <span class="p-2 bg-info bg-opacity-10 text-info rounded-3"><i class="bi bi-memory"></i></span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h3 class="fw-bold mb-0 text-dark">{{ stats.total_ram }} <span class="fs-6 fw-normal text-muted">GB RAM</span></h3>
+            </div>
+            <div class="mt-2 small text-muted">
+                Lưu trữ SSD: <strong>{{ stats.total_disk }} GB</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card card-panel p-3 h-100 border-start border-4 border-warning">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="stat-card-title">CHI PHÍ ƯỚC TÍNH</span>
+                <span class="p-2 bg-warning bg-opacity-10 text-warning rounded-3"><i class="bi bi-currency-dollar"></i></span>
+            </div>
+            <div class="d-flex align-items-baseline gap-2">
+                <h3 class="fw-bold mb-0 text-dark">${{ stats.total_cost|floatformat:2 }}</h3>
+                <span class="small text-muted">/tháng</span>
+            </div>
+            <div class="mt-2 small text-muted">
+                Dự toán ngân sách Cloud hàng tháng
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section: Trực quan hóa dữ liệu -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-lg-5">
+        <div class="card card-panel p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>Trạng Thái Hạ Tầng</h6>
+                <span class="badge bg-light text-secondary border">Realtime</span>
+            </div>
+            <div style="height: 200px; position: relative;">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-7">
+        <div class="card card-panel p-3 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-bar-chart-fill me-2 text-success"></i>Phân Bổ Nhà Cung Cấp Cloud</h6>
+                <span class="badge bg-light text-secondary border">Multi-Cloud</span>
+            </div>
+            <div style="height: 200px; position: relative;">
+                <canvas id="providerChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Thanh tìm kiếm & Lọc (Filter Bar) -->
+<div class="card card-panel p-3 mb-4">
+    <form method="GET" class="row g-2 align-items-center">
+        <div class="col-12 col-md-4">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" name="q" value="{{ search_query }}" class="form-control border-start-0" placeholder="Tìm kiếm theo tên máy chủ, IP, vùng...">
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">-- Tất cả trạng thái --</option>
+                <option value="running" {% if status_filter == 'running' %}selected{% endif %}>Đang hoạt động (Running)</option>
+                <option value="stopped" {% if status_filter == 'stopped' %}selected{% endif %}>Đã dừng (Stopped)</option>
+                <option value="maintenance" {% if status_filter == 'maintenance' %}selected{% endif %}>Bảo trì (Maintenance)</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <select name="provider" class="form-select form-select-sm">
+                <option value="">-- Tất cả nhà cung cấp --</option>
+                <option value="aws" {% if provider_filter == 'aws' %}selected{% endif %}>AWS</option>
+                <option value="gcp" {% if provider_filter == 'gcp' %}selected{% endif %}>Google Cloud (GCP)</option>
+                <option value="azure" {% if provider_filter == 'azure' %}selected{% endif %}>Microsoft Azure</option>
+                <option value="digitalocean" {% if provider_filter == 'digitalocean' %}selected{% endif %}>DigitalOcean</option>
+                <option value="local_vps" {% if provider_filter == 'local_vps' %}selected{% endif %}>Private / On-Premise</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                <i class="bi bi-filter"></i> Lọc
+            </button>
+            {% if search_query or status_filter or provider_filter %}
+                <a href="{% url 'dashboard' %}" class="btn btn-light btn-sm border" title="Hủy bộ lọc">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- Nội dung chính: Bảng danh sách máy chủ & Form tạo/sửa -->
+<div class="row g-4">
+    <!-- Cột Bảng danh sách Máy chủ -->
+    <div class="col-12 col-xl-8">
+        <div class="card card-panel overflow-hidden">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-hdd-stack me-2 text-primary"></i>Danh Sách Tài Nguyên Máy Chủ
+                </h6>
+                <span class="badge bg-slate-100 text-dark border px-2 py-1 rounded-pill small">
+                    Hiển thị {{ assets|length }} tài nguyên
+                </span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light text-muted small text-uppercase">
+                        <tr>
+                            <th class="ps-3">Máy Chủ / IP</th>
+                            <th>Cloud / Region</th>
+                            <th>Cấu Hình</th>
+                            <th>Chi Phí</th>
+                            <th>Trạng Thái</th>
+                            <th class="text-end pe-3">Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in assets %}
+                            <tr class="{% if editing_asset and editing_asset.id == asset.id %}table-primary table-active{% endif %}">
+                                <!-- Tên & IP -->
+                                <td class="ps-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="p-2 rounded-2 bg-light border text-secondary">
+                                            {% if asset.os_type == 'windows' %}
+                                                <i class="bi bi-microsoft"></i>
+                                            {% elif asset.os_type == 'ubuntu' %}
+                                                <i class="bi bi-ubuntu text-danger"></i>
+                                            {% else %}
+                                                <i class="bi bi-terminal-fill text-dark"></i>
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold text-dark">{{ asset.name }}</div>
+                                            <span class="font-mono small text-muted">
+                                                <i class="bi bi-ethernet me-1"></i>{{ asset.ip_address }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- Nhà cung cấp & Vùng -->
+                                <td>
+                                    <div>
+                                        {% if asset.provider == 'aws' %}
+                                            <span class="badge bg-warning bg-opacity-25 text-dark border border-warning">AWS</span>
+                                        {% elif asset.provider == 'gcp' %}
+                                            <span class="badge bg-primary bg-opacity-25 text-primary border border-primary">GCP</span>
+                                        {% elif asset.provider == 'azure' %}
+                                            <span class="badge bg-info bg-opacity-25 text-info border border-info">Azure</span>
+                                        {% elif asset.provider == 'digitalocean' %}
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">DigitalOcean</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border">On-Prem</span>
+                                        {% endif %}
+                                        <div class="small text-muted mt-1 text-truncate" style="max-width: 140px;" title="{{ asset.region }}">
+                                            <i class="bi bi-geo-alt me-1"></i>{{ asset.region }}
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- Cấu hình phần cứng -->
+                                <td>
+                                    <div class="small">
+                                        <strong>{{ asset.cpu_cores }}</strong> vCPU &bull; <strong>{{ asset.ram_gb }}</strong> GB RAM
+                                    </div>
+                                    <div class="small text-muted">
+                                        {{ asset.disk_gb }} GB SSD &bull; {{ asset.get_os_type_display }}
+                                    </div>
+                                </td>
+
+                                <!-- Chi phí -->
+                                <td>
+                                    <span class="fw-semibold text-dark">${{ asset.cost_monthly|floatformat:2 }}</span>
+                                    <span class="text-muted small d-block">/tháng</span>
+                                </td>
+
+                                <!-- Trạng thái -->
+                                <td>
+                                    {% if asset.status == 'running' %}
+                                        <span class="badge badge-running rounded-pill px-2 py-1">
+                                            <i class="bi bi-play-fill"></i> Running
+                                        </span>
+                                    {% elif asset.status == 'stopped' %}
+                                        <span class="badge badge-stopped rounded-pill px-2 py-1">
+                                            <i class="bi bi-stop-fill"></i> Stopped
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-maintenance rounded-pill px-2 py-1">
+                                            <i class="bi bi-tools"></i> Mnt
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <!-- Tác vụ -->
+                                <td class="text-end pe-3">
+                                    <div class="btn-group btn-group-sm">
+                                        <!-- Nút Power nhanh -->
+                                        <form method="POST" action="{% url 'toggle_power' asset.id %}" class="d-inline">
+                                            {% csrf_token %}
+                                            {% if asset.status == 'running' %}
+                                                <button type="submit" class="btn btn-outline-warning" title="Dừng máy chủ (Shutdown)">
+                                                    <i class="bi bi-power"></i>
+                                                </button>
+                                            {% else %}
+                                                <button type="submit" class="btn btn-outline-success" title="Khởi động máy chủ (Power On)">
+                                                    <i class="bi bi-power"></i>
+                                                </button>
+                                            {% endif %}
+                                        </form>
+
+                                        <!-- Nút Chỉnh sửa -->
+                                        <a href="?edit={{ asset.id }}#serverFormCard" class="btn btn-outline-primary" title="Chỉnh sửa cấu hình">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+
+                                        <!-- Nút Xóa -->
+                                        <button type="button" class="btn btn-outline-danger" title="Xóa tài nguyên" onclick="openDeleteModal('{{ asset.id }}', '{{ asset.name|escapejs }}')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-cloud-slash fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                                    <p class="mb-2">Không tìm thấy tài nguyên máy chủ nào khớp với điều kiện.</p>
+                                    <a href="#serverFormCard" class="btn btn-sm btn-primary rounded-pill">
+                                        <i class="bi bi-plus-lg me-1"></i> Khởi tạo máy chủ đầu tiên
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột Form Khởi tạo / Cập nhật máy chủ -->
+    <div class="col-12 col-xl-4" id="serverFormCard">
+        <div class="card card-panel p-4 sticky-top" style="top: 80px;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0 text-dark">
+                    {% if editing_asset %}
+                        <i class="bi bi-pencil-square text-warning me-2"></i>Cập Nhật Máy Chủ
+                    {% else %}
+                        <i class="bi bi-cloud-arrow-up-fill text-primary me-2"></i>Khởi Tạo Máy Chủ Mới
+                    {% endif %}
+                </h6>
+                {% if editing_asset %}
+                    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary rounded-pill">
+                        <i class="bi bi-x-lg"></i> Hủy
+                    </a>
+                {% endif %}
+            </div>
+
+            {% if editing_asset %}
+                <div class="alert alert-warning py-2 small mb-3">
+                    Đang chỉnh sửa: <strong>{{ editing_asset.name }}</strong> (ID: #{{ editing_asset.id }})
+                </div>
+            {% endif %}
+
+            <form method="POST" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="{% if editing_asset %}update{% else %}create{% endif %}">
+                {% if editing_asset %}
+                    <input type="hidden" name="asset_id" value="{{ editing_asset.id }}">
+                {% endif %}
+
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">
+                        {{ form.name.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">
+                        {{ form.ip_address.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.ip_address }}
+                    {% if form.ip_address.errors %}<div class="text-danger small">{{ form.ip_address.errors.0 }}</div>{% endif %}
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Provider</label>
+                        {{ form.provider }}
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Hệ Điều Hành</label>
+                        {{ form.os_type }}
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Region / Vùng</label>
+                    {{ form.region }}
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-4">
+                        <label class="form-label small fw-semibold text-secondary mb-1">vCPU</label>
+                        {{ form.cpu_cores }}
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-semibold text-secondary mb-1">RAM (GB)</label>
+                        {{ form.ram_gb }}
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-semibold text-secondary mb-1">SSD (GB)</label>
+                        {{ form.disk_gb }}
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Chi Phí ($/tháng)</label>
+                        {{ form.cost_monthly }}
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Trạng Thái</label>
+                        {{ form.status }}
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    {% if editing_asset %}
+                        <button type="submit" class="btn btn-warning py-2 fw-semibold text-dark shadow-sm">
+                            <i class="bi bi-check-lg me-1"></i> Lưu Cấu Hình
+                        </button>
+                        <a href="{% url 'dashboard' %}" class="btn btn-light border py-2">Hủy Bỏ</a>
+                    {% else %}
+                        <button type="submit" class="btn btn-primary py-2 fw-semibold shadow-sm">
+                            <i class="bi bi-cloud-plus-fill me-1"></i> Triển Khai Máy Chủ
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Xác nhận xóa (Delete Modal) -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Xác Nhận Giải Phóng Tài Nguyên
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-1">Bạn có chắc chắn muốn giải phóng và xóa máy chủ sau đây?</p>
+                <div class="p-3 bg-light rounded border mt-2">
+                    <strong class="text-danger fs-5" id="deleteTargetName"></strong>
+                </div>
+                <p class="text-muted small mt-2 mb-0">Lưu ý: Dữ liệu và ổ đĩa gắn kèm sẽ bị xóa hoàn toàn khỏi hạ tầng Cloud.</p>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Hủy</button>
+                <form method="POST" id="deleteForm" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="asset_id" id="deleteAssetId">
+                    <button type="submit" class="btn btn-danger rounded-pill px-4">
+                        <i class="bi bi-trash-fill me-1"></i> Xác Nhận Xóa
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function openDeleteModal(assetId, assetName) {
+        document.getElementById('deleteAssetId').value = assetId;
+        document.getElementById('deleteTargetName').textContent = assetName;
+        const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+        modal.show();
+    }
+
+    // Biểu đồ Chart.js: Trạng thái máy chủ
+    const ctxStatus = document.getElementById('statusChart').getContext('2d');
+    new Chart(ctxStatus, {
+        type: 'doughnut',
+        data: {
+            labels: ['Đang hoạt động', 'Đã dừng', 'Bảo trì'],
+            datasets: [{
+                data: {{ chart_data.status|safe }},
+                backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 11 } }
+                }
+            },
+            cutout: '70%'
+        }
+    });
+
+    // Biểu đồ Chart.js: Phân bố Nhà cung cấp Cloud
+    const ctxProvider = document.getElementById('providerChart').getContext('2d');
+    new Chart(ctxProvider, {
+        type: 'bar',
+        data: {
+            labels: ['AWS', 'GCP', 'Azure', 'DigitalOcean', 'On-Prem'],
+            datasets: [{
+                label: 'Số lượng máy chủ',
+                data: {{ chart_data.providers|safe }},
+                backgroundColor: ['#f59e0b', '#3b82f6', '#06b6d4', '#6366f1', '#64748b'],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0, font: { size: 10 } },
+                    grid: { color: '#f1f5f9' }
+                },
+                x: {
+                    ticks: { font: { size: 10 } },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}
