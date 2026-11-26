@@ -1,0 +1,163 @@
+---
+- name: Common Security Hardening & Base Packages (All VPS)
+  hosts: all
+  become: true
+  tasks:
+    - name: Update apt cache and install security packages
+      apt:
+        update_cache: true
+        name:
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - apt-listchanges
+          - curl
+          - git
+          - htop
+        state: present
+
+    - name: Enable unattended-upgrades for automatic security patches
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        mode: '0644'
+
+    - name: Harden SSH (Key-only, disable root login)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+      notify: Restart SSH
+
+    - name: Enable and start Fail2ban
+      service:
+        name: fail2ban
+        state: started
+        enabled: true
+
+    - name: Configure UFW default policies (deny incoming, allow outgoing)
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+
+    - name: Allow SSH (22/tcp) only from Tailscale VPN CGNAT range (100.64.0.0/10)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        from_ip: '100.64.0.0/10'
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
+
+
+- name: Provision Database Server (db-2324802010207)
+  hosts: db
+  become: true
+  tasks:
+    - name: Install MySQL Server
+      apt:
+        name: mysql-server
+        state: present
+
+    - name: Bind MySQL only to DB zone IP ({{ db_private_ip }})
+      lineinfile:
+        path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        regexp: '^#?bind-address\s*='
+        line: "bind-address = {{ db_private_ip }}"
+      notify: Restart MySQL
+
+    - name: Allow MySQL (3306/tcp) only from Web VPS DB-zone IP ({{ web_db_ip }})
+      ufw:
+        rule: allow
+        port: '3306'
+        proto: tcp
+        from_ip: "{{ web_db_ip }}"
+
+    - name: Enable UFW on DB VPS
+      ufw:
+        state: enabled
+
+  handlers:
+    - name: Restart MySQL
+      service:
+        name: mysql
+        state: restarted
+
+
+- name: Provision Web & Monitoring Server (web-2324802010207)
+  hosts: web
+  become: true
+  tasks:
+    - name: Install Nginx, Python3, pip, venv, MySQL client libs
+      apt:
+        name:
+          - nginx
+          - python3-pip
+          - python3-venv
+          - python3-dev
+          - default-libmysqlclient-dev
+          - build-essential
+          - pkg-config
+        state: present
+
+    - name: Allow HTTP/HTTPS (80, 443) on Web VPS (optional if using Cloudflare Tunnel)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '80'
+        - '443'
+
+    - name: Enable UFW on Web VPS
+      ufw:
+        state: enabled
+
+    - name: Deploy Nginx site config for app, api, and status subdomains
+      template:
+        src: templates/nginx_cloudops.conf.j2
+        dest: /etc/nginx/sites-available/cloudops
+        mode: '0644'
+      notify: Reload Nginx
+
+    - name: Enable Nginx cloudops site
+      file:
+        src: /etc/nginx/sites-available/cloudops
+        dest: /etc/nginx/sites-enabled/cloudops
+        state: link
+      notify: Reload Nginx
+
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload Nginx
+
+    - name: Deploy Gunicorn systemd service
+      template:
+        src: templates/gunicorn.service.j2
+        dest: /etc/systemd/system/gunicorn.service
+        mode: '0644'
+      notify: Reload systemd
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true

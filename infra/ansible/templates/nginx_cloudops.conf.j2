@@ -1,0 +1,49 @@
+# Nginx Reverse Proxy cho CloudOps Console (duc.id.vn)
+
+server {
+    listen 80;
+    server_name {{ domain_app }} 10.10.10.10;
+
+    client_max_body_size 15M;
+
+    location /static/ {
+        alias {{ app_dir }}/staticfiles/;
+    }
+
+    location /media/ {
+        alias {{ app_dir }}/media/;
+    }
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+
+server {
+    listen 80;
+    server_name {{ domain_api }};
+
+    client_max_body_size 15M;
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.sock;
+    }
+}
+
+server {
+    listen 80;
+    server_name {{ domain_status }};
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
