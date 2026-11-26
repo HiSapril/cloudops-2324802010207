@@ -9,7 +9,7 @@ WorkingDirectory={{ app_dir }}
 ExecStart={{ app_dir }}/venv/bin/gunicorn \
           --access-logfile - \
           --workers 3 \
-          --bind unix:/run/gunicorn.sock \
+          --bind 127.0.0.1:8000 \
           config.wsgi:application
 
 [Install]
