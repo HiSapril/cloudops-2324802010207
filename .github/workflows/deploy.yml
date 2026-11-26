@@ -1,0 +1,43 @@
+name: CI/CD - Test and Deploy CloudOps Console
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Django Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies (SQLite test mode)
+        run: |
+          python -m pip install --upgrade pip
+          pip install Django djangorestframework django-cors-headers argon2-cffi python-dotenv
+
+      - name: Run unit & API tests
+        run: python manage.py test
+
+  deploy:
+    name: Deploy to web-2324802010207
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - name: Pull latest code and restart services
+        run: |
+          cd /home/sv2324802010207/cloud_manager
+          git pull origin main
+          source venv/bin/activate
+          pip install -r requirements.txt
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+          sudo systemctl restart gunicorn
+          sudo systemctl reload nginx
