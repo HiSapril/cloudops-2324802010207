@@ -200,7 +200,12 @@
                                             {% endif %}
                                         </div>
                                         <div>
-                                            <div class="fw-semibold text-dark">{{ asset.name }}</div>
+                                            <div class="fw-semibold text-dark">
+                                                {{ asset.name }}
+                                                {% if is_admin %}
+                                                    <span class="badge bg-light text-secondary border ms-1" style="font-size: 0.68rem;">@{{ asset.owner.username }}</span>
+                                                {% endif %}
+                                            </div>
                                             <span class="font-mono small text-muted">
                                                 <i class="bi bi-ethernet me-1"></i>{{ asset.ip_address }}
                                             </span>
@@ -304,6 +309,27 @@
                     </tbody>
                 </table>
             </div>
+
+            {% if page_obj.has_other_pages %}
+            <div class="card-footer bg-white border-top py-2 px-3 d-flex justify-content-between align-items-center">
+                <small class="text-muted">Trang {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} (Tổng {{ page_obj.paginator.count }} máy chủ)</small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&status={{ status_filter }}&provider={{ provider_filter }}">&laquo;</a></li>
+                        {% endif %}
+                        {% for num in page_obj.paginator.page_range %}
+                            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                <a class="page-link" href="?page={{ num }}&q={{ search_query }}&status={{ status_filter }}&provider={{ provider_filter }}">{{ num }}</a>
+                            </li>
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&status={{ status_filter }}&provider={{ provider_filter }}">&raquo;</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
         </div>
     </div>
 

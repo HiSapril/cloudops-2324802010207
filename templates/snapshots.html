@@ -1,0 +1,196 @@
+{% extends 'base.html' %}
+
+{% block title %}Storage &amp; Snapshots - CloudOps Console{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h4 class="fw-bold mb-1 d-flex align-items-center gap-2">
+            <i class="bi bi-archive-fill text-primary"></i>
+            Quản Lý Lưu Trữ &amp; Bản Sao Lưu (Storage &amp; Snapshots)
+        </h4>
+        <p class="text-muted small mb-0">
+            Lưu trữ tệp cấu hình, bản sao lưu CSDL và snapshot máy ảo
+            {% if is_admin %}<span class="badge bg-warning text-dark ms-1">Chế độ Admin: Xem toàn bộ người dùng</span>{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <span class="badge bg-light text-dark border px-3 py-2">Tổng: <strong>{{ total_count }}</strong> bản lưu ({{ total_size_mb|floatformat:2 }} MB)</span>
+    </div>
+</div>
+
+<!-- Thanh tìm kiếm & lọc -->
+<div class="card card-panel p-3 mb-4">
+    <form method="GET" class="row g-2 align-items-center">
+        <div class="col-12 col-md-4">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" name="q" value="{{ search_query }}" class="form-control border-start-0" placeholder="Tìm tên bản lưu, vùng, ghi chú...">
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <select name="storage_type" class="form-select form-select-sm">
+                <option value="">-- Tất cả loại lưu trữ --</option>
+                <option value="config" {% if type_filter == 'config' %}selected{% endif %}>Tệp cấu hình hạ tầng</option>
+                <option value="db_backup" {% if type_filter == 'db_backup' %}selected{% endif %}>Bản sao lưu CSDL</option>
+                <option value="vm_snapshot" {% if type_filter == 'vm_snapshot' %}selected{% endif %}>Snapshot máy ảo</option>
+                <option value="log_archive" {% if type_filter == 'log_archive' %}selected{% endif %}>Lưu trữ nhật ký</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">-- Tất cả trạng thái --</option>
+                <option value="available" {% if status_filter == 'available' %}selected{% endif %}>Sẵn sàng</option>
+                <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>Đã lưu trữ</option>
+                <option value="restoring" {% if status_filter == 'restoring' %}selected{% endif %}>Đang khôi phục</option>
+            </select>
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-filter"></i> Lọc</button>
+            {% if search_query or type_filter or status_filter %}
+                <a href="{% url 'snapshots' %}" class="btn btn-light btn-sm border"><i class="bi bi-x-circle"></i></a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="row g-4">
+    <!-- Bảng danh sách -->
+    <div class="col-12 col-xl-8">
+        <div class="card card-panel overflow-hidden">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-hdd-rack me-2 text-primary"></i>Danh Sách Bản Lưu Trữ &amp; Cấu Hình</h6>
+                <span class="badge bg-light text-dark border px-2 py-1 rounded-pill small">Hiển thị {{ snapshots|length }} mục</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light text-muted small text-uppercase">
+                        <tr>
+                            <th class="ps-3">Tên / Máy chủ</th>
+                            <th>Loại &amp; Vùng</th>
+                            <th>Tệp đính kèm</th>
+                            <th>Trạng thái</th>
+                            <th class="text-end pe-3">Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for snap in snapshots %}
+                        <tr class="{% if editing_snapshot and editing_snapshot.id == snap.id %}table-primary{% endif %}">
+                            <td class="ps-3">
+                                <div class="fw-semibold text-dark">
+                                    {{ snap.name }}
+                                    {% if is_admin %}<span class="badge bg-light text-secondary border ms-1" style="font-size:0.68rem;">@{{ snap.owner.username }}</span>{% endif %}
+                                </div>
+                                <small class="text-muted">
+                                    {% if snap.asset %}<i class="bi bi-server me-1"></i>{{ snap.asset.name }}{% else %}Không gắn máy chủ{% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">{{ snap.get_storage_type_display }}</span>
+                                <div class="small text-muted mt-1">{{ snap.bucket_region }} &bull; {{ snap.size_mb }} MB</div>
+                            </td>
+                            <td>
+                                {% if snap.config_file %}
+                                    <a href="{{ snap.config_file.url }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                                        <i class="bi bi-file-earmark-arrow-down me-1"></i>Tải tệp
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted small">Không có tệp</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if snap.status == 'available' %}
+                                    <span class="badge badge-running rounded-pill px-2 py-1">Sẵn sàng</span>
+                                {% elif snap.status == 'archived' %}
+                                    <span class="badge bg-secondary bg-opacity-25 text-dark rounded-pill px-2 py-1">Đã lưu trữ</span>
+                                {% else %}
+                                    <span class="badge badge-maintenance rounded-pill px-2 py-1">Đang khôi phục</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-3">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="?edit={{ snap.id }}#snapshotFormCard" class="btn btn-outline-primary" title="Chỉnh sửa"><i class="bi bi-pencil"></i></a>
+                                    <form method="POST" action="{% url 'delete_snapshot' snap.id %}" class="d-inline" onsubmit="return confirm('Xác nhận xóa bản lưu trữ {{ snap.name|escapejs }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-danger" title="Xóa"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <i class="bi bi-archive fs-1 d-block mb-2 opacity-50"></i>
+                                Chưa có bản lưu trữ nào khớp với bộ lọc.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if page_obj.has_other_pages %}
+            <div class="card-footer bg-white border-top py-2 px-3 d-flex justify-content-between align-items-center">
+                <small class="text-muted">Trang {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} (Tổng {{ page_obj.paginator.count }} bản lưu)</small>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}&storage_type={{ type_filter }}&status={{ status_filter }}">&laquo;</a></li>
+                        {% endif %}
+                        {% for num in page_obj.paginator.page_range %}
+                            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                <a class="page-link" href="?page={{ num }}&q={{ search_query }}&storage_type={{ type_filter }}&status={{ status_filter }}">{{ num }}</a>
+                            </li>
+                        {% endfor %}
+                        {% if page_obj.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_query }}&storage_type={{ type_filter }}&status={{ status_filter }}">&raquo;</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Form tạo / sửa -->
+    <div class="col-12 col-xl-4" id="snapshotFormCard">
+        <div class="card card-panel p-4 sticky-top" style="top: 80px;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0 text-dark">
+                    {% if editing_snapshot %}
+                        <i class="bi bi-pencil-square text-warning me-2"></i>Cập Nhật Bản Lưu Trữ
+                    {% else %}
+                        <i class="bi bi-cloud-upload-fill text-primary me-2"></i>Tạo Bản Lưu Trữ Mới
+                    {% endif %}
+                </h6>
+                {% if editing_snapshot %}
+                    <a href="{% url 'snapshots' %}" class="btn btn-sm btn-outline-secondary rounded-pill"><i class="bi bi-x-lg"></i> Hủy</a>
+                {% endif %}
+            </div>
+
+            <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                {% if editing_snapshot %}
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="snapshot_id" value="{{ editing_snapshot.id }}">
+                {% else %}
+                    <input type="hidden" name="action" value="create">
+                {% endif %}
+
+                {% for field in form %}
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}
+                        <div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <button type="submit" class="btn btn-primary-console w-100">
+                    <i class="bi bi-check-circle me-1"></i> {% if editing_snapshot %}Lưu thay đổi{% else %}Tạo &amp; Tải lên{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

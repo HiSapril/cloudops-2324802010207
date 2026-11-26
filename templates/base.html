@@ -179,13 +179,30 @@
             <div class="collapse navbar-collapse" id="navbarConsoleContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-4">
                     <li class="nav-item">
-                        <a class="nav-link text-white-50 px-3 active text-white" href="{% url 'dashboard' %}">
+                        <a class="nav-link px-3 {% if request.resolver_match.url_name == 'dashboard' %}active text-white fw-semibold{% else %}text-white-50{% endif %}" href="{% url 'dashboard' %}">
                             <i class="bi bi-cpu me-1"></i> Infrastructure
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link px-3 {% if request.resolver_match.url_name == 'snapshots' %}active text-white fw-semibold{% else %}text-white-50{% endif %}" href="{% url 'snapshots' %}">
+                            <i class="bi bi-archive me-1"></i> Storage &amp; Snapshots
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white-50 px-3" href="/api/" target="_blank">
+                            <i class="bi bi-braces me-1"></i> REST API
+                        </a>
+                    </li>
+                    {% if user.is_authenticated and user.is_staff or user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link px-3 {% if request.resolver_match.url_name == 'admin_overview' %}active text-warning fw-semibold{% else %}text-warning{% endif %}" href="{% url 'admin_overview' %}">
+                            <i class="bi bi-shield-check me-1"></i> Admin Role
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
                         <a class="nav-link text-white-50 px-3" href="{% url 'export_csv' %}">
-                            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export Inventory
+                            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV
                         </a>
                     </li>
                 </ul>
@@ -196,6 +213,11 @@
                             <a class="nav-link dropdown-toggle text-white d-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-slate-800" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #1e293b;">
                                 <i class="bi bi-person-circle fs-5 text-primary"></i>
                                 <span class="fw-semibold small">{{ user.username }}</span>
+                                {% if user.is_staff or user.is_superuser %}
+                                    <span class="badge bg-warning text-dark" style="font-size: 0.65rem;">ADMIN</span>
+                                {% else %}
+                                    <span class="badge bg-info text-dark" style="font-size: 0.65rem;">USER</span>
+                                {% endif %}
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark-custom">
                                 <li class="px-3 py-2 border-bottom border-secondary">
@@ -264,7 +286,7 @@
         <div class="container-fluid px-lg-4">
             <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
                 <div>
-                    <strong>CloudOps Console</strong> &bull; Multi-Cloud Infrastructure & Asset Management Platform
+                    <strong>CloudOps Console</strong> &bull; Multi-Cloud Infrastructure &amp; Storage Platform &bull; <span class="font-mono text-primary">MSSV: 2324802010207</span>
                 </div>
                 <div>
                     <span class="text-secondary small">Production-ready Architecture &bull; 99.99% High Availability</span>
